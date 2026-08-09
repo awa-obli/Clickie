@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Listener as KeyboardListener, Key
 
+import os
 import sys
 import pywinstyles
 import darkdetect
@@ -14,7 +15,7 @@ import sv_ttk
 class AutoClickerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Clickie 连点器 - V1.0.0")
+        self.root.title("Clickie 连点器 - V1.1.0")
         self.root.resizable(False, False)
 
         self.mouse = MouseController()
@@ -30,6 +31,7 @@ class AutoClickerApp:
     # ---------------- UI ----------------
     def _build_ui(self):
         pad = {"padx": 10, "pady": 6}
+        # Combobox 输入框字体特殊处理
         self.default_font = ("Microsoft YaHei", 10)
 
         frame = ttk.Frame(self.root, padding=15)
@@ -250,17 +252,65 @@ class AutoClickerApp:
             time.sleep(interval_sec)
 
 
-def apply_theme_to_titlebar(root):
+def resource_path(relative_path):
+    """获取资源文件的绝对路径"""
+    try:
+        base_path = sys._MEIPASS  # PyInstaller 打包后解压的临时目录
+    except AttributeError:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
+
+
+def apply_fonts(root):
+    """应用字体"""
+    style = ttk.Style()
+    default_font = ("Microsoft YaHei", 10)
+    for style_name in ("TLabel", "TButton", "TEntry", "TFrame"):
+        style.configure(style_name, font=default_font)
+    # Combobox 下拉列表字体
+    root.option_add("*TCombobox*Listbox.font", default_font)
+
+
+def apply_theme_to_titlebar(root, theme):
+    """根据当前主题，切换标题栏颜色"""
     version = sys.getwindowsversion()
 
     if version.major == 10 and version.build >= 22000:
         # Windows 11
-        pywinstyles.change_header_color(root, "#1c1c1c" if sv_ttk.get_theme() == "dark" else "#fafafa")
+        pywinstyles.change_header_color(root, "#1c1c1c" if theme == "Dark" else "#fafafa")
     elif version.major == 10:
         # Windows 10
-        pywinstyles.apply_style(root, "dark" if sv_ttk.get_theme() == "dark" else "normal")
+        pywinstyles.apply_style(root, "dark" if theme == "Dark" else "normal")
         root.wm_attributes("-alpha", 0.99)
         root.wm_attributes("-alpha", 1)
+
+
+def apply_icon_by_theme(root, theme):
+    """根据当前主题，切换窗口/任务栏图标。"""
+    icon_name = "icon_dark.ico" if theme == "Dark" else "icon_light.ico"
+    icon_path = resource_path(os.path.join("assets", icon_name))
+    try:
+        root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"设置图标失败: {e}")
+
+
+def apply_full_theme(root, theme):
+    # Sun Valley ttk主题
+    sv_ttk.set_theme(theme)
+    apply_fonts(root)
+    apply_theme_to_titlebar(root, theme)
+    apply_icon_by_theme(root, theme)
+
+
+def watch_theme(root, interval_ms=2000):
+    """定期检测系统主题是否发生变化，自动刷新 ttk 主题、标题栏颜色和窗口图标"""
+    current = getattr(root, "_last_theme", None)
+    theme = darkdetect.theme()
+    if theme != current:
+        root._last_theme = theme
+        apply_full_theme(root, theme)
+    root.after(interval_ms, watch_theme, root)
 
 
 def main():
@@ -268,14 +318,8 @@ def main():
     root.withdraw()  # 先隐藏窗口，防止闪烁
     app = AutoClickerApp(root)
 
-    # Sun Valley ttk主题
-    sv_ttk.set_theme(darkdetect.theme())
-    apply_theme_to_titlebar(root)
-
-    style = ttk.Style()
-    default_font = ("Microsoft YaHei", 10)
-    for style_name in ("TLabel", "TButton", "TEntry", "TFrame"):
-        style.configure(style_name, font=default_font)
+    apply_full_theme(root, darkdetect.theme())
+    watch_theme(root)
 
     root.deiconify()
     root.mainloop()
