@@ -1,3 +1,6 @@
+import os
+import sys
+import json
 import threading
 import time
 import tkinter as tk
@@ -6,8 +9,6 @@ from tkinter import ttk, messagebox
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Listener as KeyboardListener, Key
 
-import os
-import sys
 import pywinstyles
 import darkdetect
 import sv_ttk
@@ -25,7 +26,12 @@ class AutoClickerApp:
         self.click_thread = None
         self.click_count = 0
 
+        self._loading = False
+
         self._build_ui()
+        self._load_settings()
+        # 加载的热键可能不同于默认 F6，刷新按钮文字
+        self._update_button_text()
         self._start_hotkey_listener()
 
     # ---------------- UI ----------------
@@ -87,6 +93,10 @@ class AutoClickerApp:
             row=6, column=0, columnspan=2, pady=(6, 0)
         )
 
+        # 任一设置改动即自动保存
+        for var in (self.interval_var, self.button_var, self.mode_var, self.count_var, self.hotkey_var):
+            var.trace_add("write", self._on_settings_changed)
+
     def _update_button_text(self):
         if self.clicking:
             text = f"停止({self.hotkey_var.get()})"
@@ -105,8 +115,65 @@ class AutoClickerApp:
         self.count_entry.config(state=entry_state)
         self.hotkey_combo.config(state=combo_state)
 
+    # ---------------- 设置保存 ----------------
+    def _on_settings_changed(self, *args):
+        # 加载设置期间不写盘，避免"加载→写回"循环
+        if self._loading:
+            return
+        self._save_settings()
+
+    def _save_settings(self):
+        data = {
+            "interval": self.interval_var.get(),
+            "button": self.button_var.get(),
+            "mode": self.mode_var.get(),
+            "count": self.count_var.get(),
+            "hotkey": self.hotkey_var.get(),
+        }
+        try:
+            os.makedirs(os.path.dirname(self.config_path()), exist_ok=True)
+            with open(self.config_path(), "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            print(f"保存设置失败: {e}")
+
+    def _load_settings(self):
+        self._loading = True
+        try:
+            path = self.config_path()
+            if not os.path.exists(path):
+                return
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return
+
+            # 逐项校验，非法字段只回退该字段默认值
+            if self.is_valid_interval(data.get("interval")):
+                self.interval_var.set(data["interval"])
+            if data.get("button") in ("左键", "右键"):
+                self.button_var.set(data["button"])
+            if data.get("mode") in ("单击", "双击"):
+                self.mode_var.set(data["mode"])
+            if self.is_valid_count(data.get("count")):
+                self.count_var.set(str(data["count"]))
+            if data.get("hotkey") in (f"F{i}" for i in range(1, 13)):
+                self.hotkey_var.set(data["hotkey"])
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"加载设置失败，使用默认值: {e}")
+        finally:
+            self._loading = False
+
+    def config_path(self):
+        """配置文件路径: %APPDATA%\\Clickie\\config.json"""
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, "Clickie", "config.json")
+
     # ---------------- 热键 ----------------
     def _toggle_hotkey(self, *args):
+        # 加载设置期间由 __init__ 统一启动监听器，避免重复启停
+        if self._loading:
+            return
         if self.listener.running:
             self.listener.stop()
         self._start_hotkey_listener()
@@ -165,23 +232,29 @@ class AutoClickerApp:
 
     def _validate_inputs(self):
         # 校验输入
-        try:
-            interval_ms = float(self.interval_var.get())
-            if interval_ms <= 0:
-                raise ValueError
-        except ValueError:
+        if not self.is_valid_interval(self.interval_var.get()):
             messagebox.showerror("输入错误", "点击间隔必须是大于0的数字(毫秒)")
             return False
 
-        try:
-            max_count = int(self.count_var.get())
-            if max_count < 0:
-                raise ValueError
-        except ValueError:
+        if not self.is_valid_count(self.count_var.get()):
             messagebox.showerror("输入错误", "点击次数必须是不小于0的整数")
             return False
 
         return True
+
+    def is_valid_interval(self, value):
+        """点击间隔校验"""
+        try:
+            return float(value) > 0
+        except (TypeError, ValueError):
+            return False
+
+    def is_valid_count(self, value):
+        """点击次数校验"""
+        try:
+            return int(value) >= 0
+        except (TypeError, ValueError):
+            return False
 
     def _start_waiting(self):
         self._set_inputs_enabled(False)
