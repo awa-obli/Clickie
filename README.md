@@ -6,8 +6,8 @@
 
 使用[Sun Valley ttk主题](https://github.com/rdbende/Sun-Valley-ttk-theme)，自动跟随系统深浅模式。
 
-<img width="224" height="263" alt="image" src="https://github.com/user-attachments/assets/294fb619-d45e-4f23-9de4-238e31811993" />
-<img width="224" height="263" alt="image" src="https://github.com/user-attachments/assets/5747572f-ffe4-410c-8638-17205069e311" />
+<img width="224" height="263" alt="image" src="https://github.com/user-attachments/assets/4cb3e7eb-47e1-46f7-bb02-e3bf0d62e63d" />
+<img width="224" height="263" alt="image" src="https://github.com/user-attachments/assets/1b5dc75b-aa81-4939-be95-29cb165bf0b6" />
 
 ## 功能
 
